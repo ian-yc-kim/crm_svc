@@ -16,6 +16,8 @@ fastapi = "^0.115.5"
 uvicorn = "^0.32.1"
 passlib = {extras = ["bcrypt"], version = "^1.7.4"}
 python-jose = {extras = ["cryptography"], version = "^3.5.0"}
+bcrypt = "^5.0.0"
+argon2-cffi = "^25.1.0"
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^8.3.3"
