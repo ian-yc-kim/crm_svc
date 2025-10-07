@@ -5,6 +5,24 @@ from typing import Optional, Dict, Any
 import httpx
 import streamlit as st
 
+from crm_svc.frontend.components.mobile_components import (
+    inject_mobile_base_css,
+    inject_viewport_meta,
+)
+from crm_svc.frontend.utils.mobile_utils import is_mobile_view
+from crm_svc.frontend.components.charts import (
+    create_sales_performance_chart,
+    create_team_productivity_chart,
+    create_customer_interaction_chart,
+    create_pipeline_analytics_chart,
+)
+from crm_svc.schemas.report import (
+    SalesPerformanceResponse,
+    TeamProductivityResponse,
+    CustomerInteractionResponse,
+    PipelineAnalyticsResponse,
+)
+
 logger = logging.getLogger(__name__)
 
 BASE_URL = "http://localhost:8000/api"
@@ -14,6 +32,7 @@ def _is_streamlit_runtime() -> bool:
     """Return True when running inside a Streamlit script runtime."""
     try:
         from streamlit.runtime.scriptrunner import get_script_run_ctx
+
         return get_script_run_ctx() is not None
     except Exception as e:
         # Log minimal errors per coding rules and return False for non-Streamlit contexts
@@ -129,24 +148,68 @@ def render_dashboard() -> None:
     except Exception as e:
         logger.error(e, exc_info=True)
 
+    # Inject mobile viewport and CSS to improve touch targets and scaling
+    try:
+        inject_viewport_meta()
+        inject_mobile_base_css()
+    except Exception as e:
+        logger.error(e, exc_info=True)
+
     # Placeholder authentication check using session_state
     authenticated = st.session_state.get("authenticated", False)
     if not authenticated:
         st.warning("Please log in to view the dashboard.")
         return
 
+    # detect mobile view using session_state width or default threshold
+    try:
+        mobile = is_mobile_view()
+    except Exception as e:
+        logger.error(e, exc_info=True)
+        mobile = False
+
     # Main UI
     st.header("CRM Reporting Dashboard")
 
     today = date.today()
-    start_date = st.date_input("Start date", value=today, key="start_date")
-    end_date = st.date_input("End date", value=today, key="end_date")
+
+    # Date inputs: stacked on mobile, side-by-side on desktop
+    try:
+        if mobile:
+            start_date = st.date_input("Start date", value=today, key="start_date")
+            end_date = st.date_input("End date", value=today, key="end_date")
+        else:
+            col1, col2 = st.columns(2)
+            with col1:
+                start_date = st.date_input("Start date", value=today, key="start_date")
+            with col2:
+                end_date = st.date_input("End date", value=today, key="end_date")
+    except Exception as e:
+        logger.error(e, exc_info=True)
+        # Fallback to defaults if date inputs fail
+        start_date = today
+        end_date = today
 
     # Sales performance section
     st.subheader("Sales Performance")
     sales = fetch_sales_performance_data(start_date, end_date)
     if sales:
         st.json(sales)
+        # try to render a responsive chart beneath the raw json
+        try:
+            try:
+                sp = SalesPerformanceResponse.model_validate(sales)
+            except Exception:
+                sp = None
+            if sp is not None:
+                fig = create_sales_performance_chart(sp)
+                try:
+                    st.plotly_chart(fig, use_container_width=True, config={"responsive": True})
+                except Exception as e:
+                    logger.error(e, exc_info=True)
+                    st.info("Sales performance chart unavailable")
+        except Exception as e:
+            logger.error(e, exc_info=True)
     else:
         st.info("No sales performance data available")
 
@@ -155,6 +218,20 @@ def render_dashboard() -> None:
     team = fetch_team_productivity_data(start_date, end_date)
     if team:
         st.json(team)
+        try:
+            try:
+                tp = TeamProductivityResponse.model_validate(team)
+            except Exception:
+                tp = None
+            if tp is not None:
+                fig = create_team_productivity_chart(tp)
+                try:
+                    st.plotly_chart(fig, use_container_width=True, config={"responsive": True})
+                except Exception as e:
+                    logger.error(e, exc_info=True)
+                    st.info("Team productivity chart unavailable")
+        except Exception as e:
+            logger.error(e, exc_info=True)
     else:
         st.info("No team productivity data available")
 
@@ -163,6 +240,20 @@ def render_dashboard() -> None:
     customer = fetch_customer_interaction_data(start_date, end_date)
     if customer:
         st.json(customer)
+        try:
+            try:
+                ci = CustomerInteractionResponse.model_validate(customer)
+            except Exception:
+                ci = None
+            if ci is not None:
+                fig = create_customer_interaction_chart(ci)
+                try:
+                    st.plotly_chart(fig, use_container_width=True, config={"responsive": True})
+                except Exception as e:
+                    logger.error(e, exc_info=True)
+                    st.info("Customer interaction chart unavailable")
+        except Exception as e:
+            logger.error(e, exc_info=True)
     else:
         st.info("No customer interaction data available")
 
@@ -171,6 +262,20 @@ def render_dashboard() -> None:
     pipeline = fetch_pipeline_analytics_data(start_date, end_date)
     if pipeline:
         st.json(pipeline)
+        try:
+            try:
+                pa = PipelineAnalyticsResponse.model_validate(pipeline)
+            except Exception:
+                pa = None
+            if pa is not None:
+                fig = create_pipeline_analytics_chart(pa)
+                try:
+                    st.plotly_chart(fig, use_container_width=True, config={"responsive": True})
+                except Exception as e:
+                    logger.error(e, exc_info=True)
+                    st.info("Pipeline analytics chart unavailable")
+        except Exception as e:
+            logger.error(e, exc_info=True)
     else:
         st.info("No pipeline analytics data available")
 
