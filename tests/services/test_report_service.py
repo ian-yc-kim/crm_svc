@@ -23,7 +23,8 @@ def test_get_sales_performance_caches_result(db_session):
             SalesPerformanceMetrics.end_date == end,
         )
     ).scalars().all()
-    assert len(rows) == 1
+    # mock data should NOT be persisted
+    assert len(rows) == 0
 
     res2 = svc.get_sales_performance(db_session, start, end)
     assert res1.revenue == res2.revenue
@@ -41,7 +42,7 @@ def test_get_team_productivity_caches_result(db_session):
             TeamProductivityMetrics.end_date == end,
         )
     ).scalars().all()
-    assert len(rows) == 1
+    assert len(rows) == 0
 
     res2 = svc.get_team_productivity(db_session, start, end)
     assert res1.tasks_completed == res2.tasks_completed
@@ -59,7 +60,7 @@ def test_get_customer_interaction_caches_result(db_session):
             CustomerInteractionMetrics.end_date == end,
         )
     ).scalars().all()
-    assert len(rows) == 1
+    assert len(rows) == 0
 
     res2 = svc.get_customer_interaction(db_session, start, end)
     assert res1.total_interactions == res2.total_interactions
@@ -77,7 +78,7 @@ def test_get_pipeline_analytics_caches_result(db_session):
             PipelineAnalyticsMetrics.end_date == end,
         )
     ).scalars().all()
-    assert len(rows) == 1
+    assert len(rows) == 0
 
     res2 = svc.get_pipeline_analytics(db_session, start, end)
     assert res1.stage_conversion_rates == res2.stage_conversion_rates
@@ -93,3 +94,36 @@ def test_invalid_date_range_raises(db_session):
         assert False, "Expected ValueError"
     except ValueError:
         pass
+
+
+def test_single_day_range_caches_once(db_session):
+    svc = ReportService()
+    start = date(2025, 6, 1)
+    end = date(2025, 6, 1)
+
+    res1 = svc.get_sales_performance(db_session, start, end)
+    rows = db_session.execute(
+        select(SalesPerformanceMetrics).where(
+            SalesPerformanceMetrics.start_date == start,
+            SalesPerformanceMetrics.end_date == end,
+        )
+    ).scalars().all()
+    assert len(rows) == 0
+    res2 = svc.get_sales_performance(db_session, start, end)
+    assert res1.revenue == res2.revenue
+
+
+def test_large_range_caps_values(db_session):
+    svc = ReportService()
+    start = date(2025, 1, 1)
+    end = date(2025, 12, 31)
+
+    sales = svc.get_sales_performance(db_session, start, end)
+    assert sales.conversion_rate <= 0.9
+
+    team = svc.get_team_productivity(db_session, start, end)
+    assert 0.0 <= team.activity_level <= 1.0
+
+    pipeline = svc.get_pipeline_analytics(db_session, start, end)
+    for rate in pipeline.stage_conversion_rates.values():
+        assert 0.0 < rate <= 0.95
